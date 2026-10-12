@@ -35,12 +35,14 @@ import { Droplets, Gauge, Sunrise, Sunset, Wind } from "lucide-react";
 import { CountUp } from "@/components/count-up";
 import { WeatherIcon } from "@/components/weather-icon";
 import { CitySearch } from "@/components/city-search";
+import { LifeTipBanner, LifeTipGrid } from "@/components/life-tips";
 import {
   describeWeather,
   windDirectionLabel,
   type WeatherData,
 } from "@/lib/weather";
 import { type CityEntry } from "@/lib/city-search";
+import { buildLifeTips, pickBannerTip, pickGridTips } from "@/lib/life-tips";
 
 /* ---------------------------------- 动效预设 --------------------------------- */
 
@@ -170,6 +172,11 @@ export function WeatherDashboard({
   const currentDesc = describeWeather(data.current.weatherCode);
   const today = data.daily[0];
 
+  /* 生活提醒：纯函数计算，无持久化 */
+  const lifeTips = buildLifeTips(data);
+  const bannerTip = pickBannerTip(lifeTips);
+  const gridTips = pickGridTips(lifeTips);
+
   return (
     <div
       ref={containerRef}
@@ -264,6 +271,9 @@ export function WeatherDashboard({
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.32, ease: "easeOut" }}
           >
+            {/* 顶部提醒横幅：始终有内容（Apple Weather 的做法） */}
+            <LifeTipBanner tip={bannerTip} />
+
             {/* 当前天气主卡 */}
             <GlassCard className="mb-6 overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-8">
@@ -354,6 +364,9 @@ export function WeatherDashboard({
                 delay={0.18}
               />
             </div>
+
+            {/* 生活提醒网格 */}
+            <LifeTipGrid tips={gridTips} />
 
             {/* 温度趋势图 */}
             <SectionTitle>未来 24 小时温度趋势</SectionTitle>

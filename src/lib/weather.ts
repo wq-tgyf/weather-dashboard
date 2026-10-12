@@ -75,9 +75,13 @@ export type HourlyPoint = {
   time: string; // ISO 字符串
   hourLabel: string; // "14:00"
   temperature: number;
+  /** 体感温度 —— 已综合湿度、风速、辐射，穿衣/运动判断用它 */
+  apparentTemperature: number;
   humidity: number;
   precipitationProbability: number;
   windSpeed: number;
+  /** 紫外线指数（国标 GB/T 36744—2018 口径） */
+  uvIndex: number;
 };
 
 /** 单日预报 */
@@ -89,6 +93,8 @@ export type DailyPoint = {
   tempMax: number;
   tempMin: number;
   precipitationProbability: number;
+  /** 当日最大紫外线指数 */
+  uvIndexMax: number;
   sunrise: string;
   sunset: string;
 };
@@ -106,6 +112,10 @@ export type WeatherData = {
     isDay: boolean;
     pressure: number;
     precipitation: number;
+    /** 当前紫外线指数 */
+    uvIndex: number;
+    /** 能见度（米） */
+    visibility: number;
   };
   hourly: HourlyPoint[];
   daily: DailyPoint[];
@@ -159,18 +169,23 @@ export async function fetchWeather(
       "surface_pressure",
       "wind_speed_10m",
       "wind_direction_10m",
+      "uv_index",
+      "visibility",
     ].join(","),
     hourly: [
       "temperature_2m",
+      "apparent_temperature",
       "relative_humidity_2m",
       "precipitation_probability",
       "wind_speed_10m",
+      "uv_index",
     ].join(","),
     daily: [
       "weather_code",
       "temperature_2m_max",
       "temperature_2m_min",
       "precipitation_probability_max",
+      "uv_index_max",
       "sunrise",
       "sunset",
     ].join(","),
@@ -211,10 +226,12 @@ export async function fetchWeather(
         time,
         hourLabel: formatHour(time),
         temperature: json.hourly.temperature_2m?.[idx] ?? 0,
+        apparentTemperature: json.hourly.apparent_temperature?.[idx] ?? 0,
         humidity: json.hourly.relative_humidity_2m?.[idx] ?? 0,
         precipitationProbability:
           json.hourly.precipitation_probability?.[idx] ?? 0,
         windSpeed: json.hourly.wind_speed_10m?.[idx] ?? 0,
+        uvIndex: json.hourly.uv_index?.[idx] ?? 0,
       };
     });
 
@@ -228,6 +245,7 @@ export async function fetchWeather(
     tempMin: json.daily.temperature_2m_min?.[i] ?? 0,
     precipitationProbability:
       json.daily.precipitation_probability_max?.[i] ?? 0,
+    uvIndexMax: json.daily.uv_index_max?.[i] ?? 0,
     sunrise: formatHour(json.daily.sunrise?.[i] ?? ""),
     sunset: formatHour(json.daily.sunset?.[i] ?? ""),
   }));
@@ -251,6 +269,8 @@ export async function fetchWeather(
       isDay: json.current?.is_day === 1,
       pressure: json.current?.surface_pressure ?? 0,
       precipitation: json.current?.precipitation ?? 0,
+      uvIndex: json.current?.uv_index ?? 0,
+      visibility: json.current?.visibility ?? 10000,
     },
     hourly,
     daily,
