@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 内部调研笔记（不属于项目产物）
+NEXT16-BRIEF.md
