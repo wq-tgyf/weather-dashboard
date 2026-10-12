@@ -19,25 +19,27 @@ import type { LifeTip } from "@/lib/life-tips";
 
 const spring = { type: "spring" as const, stiffness: 300, damping: 28 };
 
-/** 按严重程度决定配色 */
+/**
+ * 按严重程度决定配色（苹果风浅色版）
+ *
+ * 用「-50 档底色 + -700 档文字」的组合，对比度全部 ≥4.5 达 WCAG AA。
+ * 注意：不能沿用深色版的 /10 半透明底，浅色下会糊。
+ */
 const SEVERITY_STYLE = {
   warning: {
-    ring: "ring-amber-400/30",
-    bg: "bg-amber-500/10",
-    text: "text-amber-200",
-    icon: "text-amber-300",
+    bg: "bg-[#fff4e5]",
+    text: "text-[#a05a00]",
+    border: "border-[#ffd699]",
   },
   advice: {
-    ring: "ring-sky-400/30",
-    bg: "bg-sky-500/10",
-    text: "text-sky-200",
-    icon: "text-sky-300",
+    bg: "bg-[#e8f5e9]",
+    text: "text-[#1d7a3e]",
+    border: "border-[#a5d6a7]",
   },
   info: {
-    ring: "ring-white/10",
-    bg: "bg-white/5",
-    text: "text-white/70",
-    icon: "text-white/50",
+    bg: "bg-[#e8f2fd]",
+    text: "text-[#0066cc]",
+    border: "border-[#b3d7ff]",
   },
 } as const;
 
@@ -50,7 +52,7 @@ export function LifeTipBanner({ tip }: { tip: LifeTip }) {
 
   return (
     <motion.div
-      className={`mb-6 flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 backdrop-blur-xl ${style.bg} ${style.ring}`}
+      className={`mb-6 flex items-center gap-3 rounded-[11px] border px-4 py-3 ${style.bg} ${style.border}`}
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={spring}
@@ -58,9 +60,9 @@ export function LifeTipBanner({ tip }: { tip: LifeTip }) {
       <span className="text-xl leading-none" aria-hidden>
         {tip.icon}
       </span>
-      <span className={`text-sm font-medium ${style.text}`}>{tip.title}</span>
+      <span className={`text-[15px] font-medium ${style.text}`}>{tip.title}</span>
       {tip.source && (
-        <span className="ml-auto hidden text-[11px] text-white/25 sm:inline">
+        <span className="ml-auto hidden text-[11px] font-normal text-ink-tertiary sm:inline">
           {tip.source}
         </span>
       )}
@@ -79,11 +81,11 @@ function TipCard({ tip, index }: { tip: LifeTip; index: number }) {
   return (
     <motion.div
       layout
-      className={`cursor-pointer rounded-2xl p-4 ring-1 backdrop-blur-xl transition-colors ${style.bg} ${style.ring} hover:bg-white/10`}
+      className={`cursor-pointer rounded-[11px] border p-4 transition-shadow ${style.bg} ${style.border} hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)]`}
       initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.3 }}
-      whileHover={{ y: -4 }}
+      whileHover={{ y: -2 }}
       transition={{ ...spring, delay: index * 0.05 }}
       onClick={() => setExpanded((e) => !e)}
     >
@@ -92,12 +94,12 @@ function TipCard({ tip, index }: { tip: LifeTip; index: number }) {
           {tip.icon}
         </span>
         <div className="min-w-0 flex-1">
-          <p className={`text-sm font-medium ${style.text}`}>{tip.title}</p>
+          <p className={`text-[15px] font-medium ${style.text}`}>{tip.title}</p>
 
           <AnimatePresence initial={false}>
             {expanded && (
               <motion.p
-                className="mt-2 text-xs leading-relaxed text-white/50"
+                className="mt-2 text-xs font-normal leading-relaxed text-ink-secondary"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
@@ -105,7 +107,7 @@ function TipCard({ tip, index }: { tip: LifeTip; index: number }) {
               >
                 {tip.detail}
                 {tip.source && (
-                  <span className="mt-1 block text-[10px] text-white/25">
+                  <span className="mt-1 block text-[10px] text-ink-tertiary">
                     依据：{tip.source}
                   </span>
                 )}
@@ -115,7 +117,7 @@ function TipCard({ tip, index }: { tip: LifeTip; index: number }) {
         </div>
 
         <ChevronDown
-          className={`size-4 shrink-0 text-white/25 transition-transform ${
+          className={`size-4 shrink-0 text-ink-tertiary transition-transform ${
             expanded ? "rotate-180" : ""
           }`}
         />
@@ -130,7 +132,7 @@ export function LifeTipGrid({ tips }: { tips: LifeTip[] }) {
   return (
     <div className="mb-10">
       <motion.h2
-        className="mb-4 text-sm font-medium tracking-wide text-muted-foreground"
+        className="mb-4 text-[1.3125rem] font-semibold leading-snug text-ink"
         initial={{ opacity: 0, x: -12 }}
         whileInView={{ opacity: 1, x: 0 }}
         viewport={{ once: true, amount: 0.6 }}

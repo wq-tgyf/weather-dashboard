@@ -12,13 +12,8 @@
  * 6. 鼠标跟随光晕     —— onMouseMove + CSS 变量
  */
 
-import { useRef, useState } from "react";
-import {
-  AnimatePresence,
-  motion,
-  useMotionTemplate,
-  useMotionValue,
-} from "framer-motion";
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Area,
   AreaChart,
@@ -53,7 +48,7 @@ const spring = { type: "spring" as const, stiffness: 260, damping: 26 };
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <motion.h2
-      className="mb-4 text-sm font-medium tracking-wide text-muted-foreground"
+      className="mb-4 text-[1.3125rem] font-semibold leading-snug text-ink"
       initial={{ opacity: 0, x: -12 }}
       whileInView={{ opacity: 1, x: 0 }}
       viewport={{ once: true, amount: 0.6 }}
@@ -64,7 +59,14 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** 玻璃质感卡片 */
+/**
+ * 卡片
+ *
+ * 苹果风做法：白卡浮在 #f5f5f7 页面上，靠 2% 亮度差造层次 ——
+ * 无边框、无阴影。阴影只留给 hover 态。
+ *
+ * 注意：不要用阴影"补层次"，这是深色玻璃拟态迁移到浅色时最容易做砸的地方。
+ */
 function GlassCard({
   children,
   className = "",
@@ -76,11 +78,11 @@ function GlassCard({
 }) {
   return (
     <motion.div
-      className={`rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl ${className}`}
+      className={`rounded-[11px] bg-white p-5 transition-shadow duration-300 hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] ${className}`}
       initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.25 }}
-      whileHover={{ y: -6, scale: 1.015 }}
+      whileHover={{ y: -2 }}
       transition={{ ...spring, delay }}
     >
       {children}
@@ -106,12 +108,12 @@ function MetricCard({
 }) {
   return (
     <GlassCard className="flex items-center gap-4" delay={delay}>
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white/80">
+      <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-2xl font-semibold tabular-nums text-white">
+        <p className="text-xs text-ink-secondary">{label}</p>
+        <p className="mt-0.5 text-[1.75rem] font-light leading-none tabular-nums text-ink">
           <CountUp value={value} suffix={suffix} decimals={decimals} />
         </p>
       </div>
@@ -134,12 +136,6 @@ export function WeatherDashboard({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // 鼠标跟随光晕
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-  const glow = useMotionTemplate`radial-gradient(520px circle at ${mouseX}px ${mouseY}px, rgba(96,165,250,0.18), transparent 70%)`;
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const data = cache[selected.id] ?? initialData;
 
@@ -178,24 +174,7 @@ export function WeatherDashboard({
   const gridTips = pickGridTips(lifeTips);
 
   return (
-    <div
-      ref={containerRef}
-      onMouseMove={(e) => {
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        mouseX.set(e.clientX - rect.left);
-        mouseY.set(e.clientY - rect.top);
-      }}
-      className="relative min-h-screen overflow-hidden bg-[#070b14] text-white"
-    >
-      {/* 背景光晕层 */}
-      <motion.div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: glow }}
-      />
-      {/* 顶部渐变色带 */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-blue-500/10 to-transparent" />
-
+    <div className="relative min-h-screen bg-canvas text-ink">
       <div className="relative mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
         {/* 标题 */}
         <motion.header
@@ -240,12 +219,12 @@ export function WeatherDashboard({
             animate={{ opacity: 1, x: 0 }}
             transition={spring}
           >
-            <span className="text-white/35">当前</span>
-            <span className="rounded-full bg-blue-500/20 px-3 py-1 text-blue-200 ring-1 ring-blue-400/30">
+            <span className="text-ink-tertiary">当前</span>
+            <span className="rounded-full bg-accent-tint px-3 py-1 text-[15px] font-medium text-accent-strong">
               {selected.name}
             </span>
             {selected.region && (
-              <span className="hidden text-xs text-white/35 sm:inline">
+              <span className="hidden text-xs text-ink-tertiary sm:inline">
                 {selected.region}
               </span>
             )}
@@ -275,21 +254,24 @@ export function WeatherDashboard({
             <LifeTipBanner tip={bannerTip} />
 
             {/* 当前天气主卡 */}
-            <GlassCard className="mb-6 overflow-hidden">
+            <GlassCard className="mb-6">
               <div className="flex flex-wrap items-center justify-between gap-8">
                 <div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-[1.0625rem] font-normal text-ink-secondary">
                     {data.city.name} · {data.city.country}
                   </p>
-                  <div className="mt-2 flex items-end gap-4">
-                    <span className="text-6xl font-bold tabular-nums leading-none sm:text-7xl">
+                  {/* 苹果风：超大 + 极细字重（200）。纯数字可用，中文不可用 200 */}
+                  <div className="mt-2 flex items-start gap-1">
+                    <span className="text-[4.5rem] font-extralight leading-[0.9] tracking-tight tabular-nums text-ink sm:text-[6rem]">
                       <CountUp value={data.current.temperature} decimals={1} />
                     </span>
-                    <span className="pb-2 text-2xl text-white/60">°C</span>
+                    <span className="mt-2 text-2xl font-light text-ink-secondary">
+                      °C
+                    </span>
                   </div>
-                  <p className="mt-3 text-base text-white/80">
+                  <p className="mt-3 text-[1.0625rem] font-normal leading-relaxed text-ink">
                     {currentDesc.label}
-                    <span className="ml-3 text-sm text-muted-foreground">
+                    <span className="ml-3 text-sm font-normal text-ink-secondary">
                       体感{" "}
                       <CountUp
                         value={data.current.apparentTemperature}
@@ -301,9 +283,9 @@ export function WeatherDashboard({
                 </div>
 
                 <motion.div
-                  className="text-blue-300"
-                  initial={{ scale: 0.6, opacity: 0, rotate: -20 }}
-                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                  className="text-accent"
+                  initial={{ scale: 0.75, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
                   transition={{ ...spring, delay: 0.15 }}
                 >
                   <WeatherIcon name={currentDesc.icon} className="size-28" />
@@ -311,21 +293,25 @@ export function WeatherDashboard({
               </div>
 
               {today && (
-                <div className="mt-6 flex flex-wrap gap-x-8 gap-y-3 border-t border-white/10 pt-5 text-sm">
-                  <span className="flex items-center gap-2 text-white/70">
-                    <Sunrise className="size-4 text-amber-300" />
+                <div className="mt-6 flex flex-wrap gap-x-8 gap-y-3 border-t border-separator pt-5 text-sm">
+                  <span className="flex items-center gap-2 text-ink-secondary">
+                    <Sunrise className="size-4 text-amber-600" />
                     日出 {today.sunrise}
                   </span>
-                  <span className="flex items-center gap-2 text-white/70">
-                    <Sunset className="size-4 text-orange-300" />
+                  <span className="flex items-center gap-2 text-ink-secondary">
+                    <Sunset className="size-4 text-orange-600" />
                     日落 {today.sunset}
                   </span>
-                  <span className="text-white/70">
+                  <span className="text-ink-secondary">
                     最高{" "}
-                    <CountUp value={today.tempMax} decimals={0} suffix="°" />
+                    <span className="font-medium tabular-nums text-ink">
+                      <CountUp value={today.tempMax} decimals={0} suffix="°" />
+                    </span>
                     {" / "}
                     最低{" "}
-                    <CountUp value={today.tempMin} decimals={0} suffix="°" />
+                    <span className="font-medium tabular-nums text-ink">
+                      <CountUp value={today.tempMin} decimals={0} suffix="°" />
+                    </span>
                   </span>
                 </div>
               )}
@@ -379,47 +365,52 @@ export function WeatherDashboard({
                   >
                     <defs>
                       <linearGradient id="tempGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.5} />
-                        <stop offset="100%" stopColor="#60a5fa" stopOpacity={0} />
+                        <stop offset="0%" stopColor="#0071e3" stopOpacity={0.28} />
+                        <stop offset="60%" stopColor="#0071e3" stopOpacity={0.08} />
+                        <stop offset="100%" stopColor="#0071e3" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="rgba(255,255,255,0.07)"
+                      stroke="#d2d2d7"
                       vertical={false}
                     />
                     <XAxis
                       dataKey="hourLabel"
-                      stroke="rgba(255,255,255,0.4)"
+                      stroke="#d2d2d7"
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
                       interval={3}
+                      tick={{ fill: "#86868b" }}
                     />
                     <YAxis
-                      stroke="rgba(255,255,255,0.4)"
+                      stroke="#d2d2d7"
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
                       unit="°"
                       domain={["dataMin - 2", "dataMax + 2"]}
                       allowDecimals={false}
+                      tick={{ fill: "#86868b" }}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "rgba(10,15,28,0.92)",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        borderRadius: 12,
+                        background: "#ffffff",
+                        border: "1px solid #d2d2d7",
+                        borderRadius: 11,
                         fontSize: 12,
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                       }}
-                      labelStyle={{ color: "rgba(255,255,255,0.7)" }}
+                      labelStyle={{ color: "#6e6e73", fontWeight: 500 }}
+                      itemStyle={{ color: "#1d1d1f" }}
                       formatter={(v) => [`${v}°C`, "温度"]}
                     />
                     <Area
                       type="monotone"
                       dataKey="temperature"
-                      stroke="#60a5fa"
-                      strokeWidth={2.5}
+                      stroke="#0071e3"
+                      strokeWidth={2}
                       fill="url(#tempGrad)"
                       animationDuration={1400}
                       animationEasing="ease-out"
@@ -440,37 +431,42 @@ export function WeatherDashboard({
                   >
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="rgba(255,255,255,0.07)"
+                      stroke="#d2d2d7"
                       vertical={false}
                     />
                     <XAxis
                       dataKey="hourLabel"
-                      stroke="rgba(255,255,255,0.4)"
+                      stroke="#d2d2d7"
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
                       interval={3}
+                      tick={{ fill: "#86868b" }}
                     />
                     <YAxis
-                      stroke="rgba(255,255,255,0.4)"
+                      stroke="#d2d2d7"
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
                       unit="%"
+                      tick={{ fill: "#86868b" }}
                     />
                     <Tooltip
-                      cursor={{ fill: "rgba(255,255,255,0.05)" }}
+                      cursor={{ fill: "rgba(0,113,227,0.04)" }}
                       contentStyle={{
-                        background: "rgba(10,15,28,0.92)",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        borderRadius: 12,
+                        background: "#ffffff",
+                        border: "1px solid #d2d2d7",
+                        borderRadius: 11,
                         fontSize: 12,
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                       }}
+                      labelStyle={{ color: "#6e6e73", fontWeight: 500 }}
+                      itemStyle={{ color: "#1d1d1f" }}
                       formatter={(v) => [`${v}%`, "降水概率"]}
                     />
                     <Bar
                       dataKey="precipitationProbability"
-                      fill="#38bdf8"
+                      fill="#0071e3"
                       radius={[4, 4, 0, 0]}
                       animationDuration={1100}
                       animationEasing="ease-out"
@@ -491,14 +487,14 @@ export function WeatherDashboard({
                     className="text-center"
                     delay={i * 0.05}
                   >
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs font-normal text-ink-secondary">
                       {i === 0 ? "今天" : day.weekday}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-white/40">
+                    <p className="mt-0.5 text-[11px] font-normal text-ink-tertiary">
                       {day.dateLabel}
                     </p>
                     <motion.div
-                      className="my-3 flex justify-center text-blue-300"
+                      className="my-3 flex justify-center text-accent"
                       initial={{ scale: 0.7, opacity: 0 }}
                       whileInView={{ scale: 1, opacity: 1 }}
                       viewport={{ once: true }}
@@ -506,14 +502,17 @@ export function WeatherDashboard({
                     >
                       <WeatherIcon name={desc.icon} className="size-8" />
                     </motion.div>
-                    <p className="text-xs text-white/60">{desc.label}</p>
-                    <p className="mt-2 text-sm font-semibold tabular-nums">
+                    <p className="text-xs font-normal text-ink-secondary">
+                      {desc.label}
+                    </p>
+                    <p className="mt-2 text-sm font-medium tabular-nums text-ink">
                       {Math.round(day.tempMax)}°
-                      <span className="ml-1 font-normal text-white/40">
+                      <span className="ml-1 font-normal text-ink-tertiary">
                         {Math.round(day.tempMin)}°
                       </span>
                     </p>
-                    <p className="mt-1 text-[11px] text-sky-300/80">
+                    {/* 11px 小字：用 #0066cc(5.11:1) 而非 #0071e3(4.70:1) */}
+                    <p className="mt-1 text-[11px] font-normal text-accent-strong">
                       {day.precipitationProbability}%
                     </p>
                   </GlassCard>
@@ -527,7 +526,7 @@ export function WeatherDashboard({
         <AnimatePresence>
           {loading && (
             <motion.div
-              className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs backdrop-blur-xl"
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white px-4 py-2 text-xs text-ink-secondary shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
@@ -538,7 +537,7 @@ export function WeatherDashboard({
         </AnimatePresence>
 
         <motion.footer
-          className="mt-16 border-t border-white/10 pt-6 text-center text-xs text-muted-foreground"
+          className="mt-16 border-t border-separator pt-6 text-center text-xs text-ink-secondary"
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}

@@ -15,20 +15,22 @@ export default function Error({
   retry: () => void;
 }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[#070b14] px-6 text-center text-white">
-      <div className="rounded-2xl border border-red-500/25 bg-red-500/10 p-8 backdrop-blur-xl">
-        <h1 className="text-xl font-semibold">天气数据加载失败</h1>
-        <p className="mt-2 max-w-md text-sm text-white/70">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-canvas px-6 text-center text-ink">
+      <div className="max-w-md rounded-[11px] bg-white p-8">
+        <h1 className="text-[1.3125rem] font-semibold leading-snug">
+          天气数据加载失败
+        </h1>
+        <p className="mt-2 text-sm font-normal leading-relaxed text-ink-secondary">
           {error.message || "无法连接到天气数据服务，请稍后重试。"}
         </p>
         {error.digest && (
-          <p className="mt-2 font-mono text-xs text-white/40">
+          <p className="mt-2 font-mono text-xs text-ink-tertiary">
             错误标识：{error.digest}
           </p>
         )}
         <button
           onClick={() => retry()}
-          className="mt-6 rounded-full bg-white/10 px-5 py-2 text-sm transition-colors hover:bg-white/20"
+          className="mt-6 rounded-full bg-accent px-5 py-2.5 text-[15px] font-normal text-white transition-colors hover:bg-accent-hover"
         >
           重新加载
         </button>

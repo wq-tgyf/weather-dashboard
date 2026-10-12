@@ -103,7 +103,7 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
         className="relative flex items-center"
         whileFocus={{ scale: 1.01 }}
       >
-        <Search className="pointer-events-none absolute left-3.5 size-4 text-white/40" />
+        <Search className="pointer-events-none absolute left-3.5 size-4 text-ink-tertiary" />
         <input
           ref={inputRef}
           type="text"
@@ -116,15 +116,15 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
           onKeyDown={onKeyDown}
           placeholder="搜索城市，支持拼音 / 简拼（如 bj、sjz）"
           aria-label="搜索城市"
-          className="w-full rounded-full border border-white/10 bg-white/5 py-2.5 pl-10 pr-10 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-blue-400/50 focus:bg-white/10"
+          className="w-full rounded-full border border-transparent bg-white py-3 pl-11 pr-11 text-[15px] font-normal text-ink placeholder:text-ink-quaternary outline-none transition-all focus:border-accent/30 focus:ring-4 focus:ring-accent/10"
         />
 
         {/* 清除按钮 / 加载指示 */}
-        <div className="absolute right-3 flex items-center gap-1">
+        <div className="absolute right-4 flex items-center gap-1">
           <AnimatePresence>
             {loading && (
               <motion.span
-                className="size-3.5 rounded-full border-2 border-white/20 border-t-blue-400"
+                className="size-3.5 rounded-full border-2 border-separator border-t-accent"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1, rotate: 360 }}
                 exit={{ opacity: 0 }}
@@ -143,7 +143,7 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
                 inputRef.current?.focus();
               }}
               aria-label="清除搜索"
-              className="rounded-full p-0.5 text-white/40 transition-colors hover:text-white/80"
+              className="rounded-full p-0.5 text-ink-tertiary transition-colors hover:text-ink"
             >
               <X className="size-4" />
             </button>
@@ -155,24 +155,24 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
       <AnimatePresence>
         {open && (results.length > 0 || showEmpty) && (
           <motion.div
-            className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0b1120]/95 shadow-2xl backdrop-blur-xl"
+            className="absolute z-50 mt-2 w-full overflow-hidden rounded-[11px] bg-white shadow-[0_8px_32px_rgba(0,0,0,0.12)]"
             initial={{ opacity: 0, y: -8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.98 }}
             transition={{ duration: 0.16, ease: "easeOut" }}
           >
             {!query.trim() && (
-              <p className="px-4 pt-3 pb-1 text-[11px] tracking-wide text-white/35">
+              <p className="px-4 pt-3 pb-1 text-[11px] font-normal tracking-wide text-ink-tertiary">
                 热门城市
               </p>
             )}
 
             {showEmpty ? (
               <div className="px-4 py-6 text-center">
-                <p className="text-sm text-white/60">
+                <p className="text-sm font-normal text-ink-secondary">
                   没有找到「{query}」对应的城市
                 </p>
-                <p className="mt-1 text-xs text-white/35">
+                <p className="mt-1 text-xs font-normal text-ink-tertiary">
                   试试输入城市名的拼音，如 hangzhou
                 </p>
               </div>
@@ -187,35 +187,35 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
                         onMouseEnter={() => setActiveIndex(i)}
                         onClick={() => choose(city)}
                         className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors ${
-                          isActive ? "bg-white/10" : "hover:bg-white/5"
+                          isActive ? "bg-canvas" : "hover:bg-canvas"
                         }`}
                       >
                         <MapPin
                           className={`size-4 shrink-0 ${
-                            isActive ? "text-blue-400" : "text-white/30"
+                            isActive ? "text-accent" : "text-ink-tertiary"
                           }`}
                         />
 
                         <span className="min-w-0 flex-1">
                           <span className="flex items-baseline gap-2">
-                            <span className="truncate text-sm text-white">
+                            <span className="truncate text-[15px] font-normal text-ink">
                               {city.name}
                             </span>
                             {city.level === 2 && (
-                              <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/50">
+                              <span className="shrink-0 rounded bg-canvas px-1.5 py-0.5 text-[10px] text-ink-secondary">
                                 区县
                               </span>
                             )}
                           </span>
                           {city.region && (
-                            <span className="mt-0.5 block truncate text-xs text-white/40">
+                            <span className="mt-0.5 block truncate text-xs font-normal text-ink-secondary">
                               {city.region}
                             </span>
                           )}
                         </span>
 
                         {isCurrent && (
-                          <Check className="size-4 shrink-0 text-blue-400" />
+                          <Check className="size-4 shrink-0 text-accent" />
                         )}
                       </button>
                     </li>
@@ -225,7 +225,7 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
             )}
 
             {/* 底部提示 */}
-            <div className="flex items-center gap-3 border-t border-white/5 px-4 py-2 text-[11px] text-white/30">
+            <div className="flex items-center gap-3 border-t border-separator px-4 py-2 text-[11px] font-normal text-ink-tertiary">
               <span>↑↓ 选择</span>
               <span>Enter 确认</span>
               <span>Esc 关闭</span>
