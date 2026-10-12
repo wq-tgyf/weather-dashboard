@@ -34,22 +34,17 @@ import { Droplets, Gauge, Sunrise, Sunset, Wind } from "lucide-react";
 
 import { CountUp } from "@/components/count-up";
 import { WeatherIcon } from "@/components/weather-icon";
+import { CitySearch } from "@/components/city-search";
 import {
-  CITIES,
   describeWeather,
   windDirectionLabel,
-  type City,
   type WeatherData,
 } from "@/lib/weather";
+import { type CityEntry } from "@/lib/city-search";
 
 /* ---------------------------------- 动效预设 --------------------------------- */
 
 const spring = { type: "spring" as const, stiffness: 260, damping: 26 };
-
-const fadeUp = {
-  initial: { opacity: 0, y: 18 },
-  animate: { opacity: 1, y: 0 },
-};
 
 /* ---------------------------------- 小组件 ---------------------------------- */
 
@@ -126,12 +121,14 @@ function MetricCard({
 
 export function WeatherDashboard({
   initialData,
+  initialCity,
 }: {
   initialData: WeatherData;
+  initialCity: CityEntry;
 }) {
-  const [selected, setSelected] = useState<City>(initialData.city);
+  const [selected, setSelected] = useState<CityEntry>(initialCity);
   const [cache, setCache] = useState<Record<string, WeatherData>>({
-    [initialData.city.id]: initialData,
+    [initialCity.id]: initialData,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,16 +141,22 @@ export function WeatherDashboard({
 
   const data = cache[selected.id] ?? initialData;
 
-  async function selectCity(city: City) {
+  async function selectCity(city: CityEntry) {
     if (city.id === selected.id) return;
     setSelected(city);
     setError(null);
 
+    /* 已缓存的直接返回（避免重复请求） */
     if (cache[city.id]) return;
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/weather?city=${city.id}`);
+      const params = new URLSearchParams({
+        lat: String(city.latitude),
+        lon: String(city.longitude),
+        name: city.name,
+      });
+      const res = await fetch(`/api/weather?${params.toString()}`);
       if (!res.ok) throw new Error(`请求失败（${res.status}）`);
       const json: WeatherData = await res.json();
       setCache((prev) => ({ ...prev, [city.id]: json }));
@@ -213,45 +216,33 @@ export function WeatherDashboard({
           </div>
         </motion.header>
 
-        {/* 城市切换 */}
+        {/* 城市搜索 */}
         <motion.div
-          className="mb-8 flex flex-wrap gap-2"
-          initial="hidden"
-          animate="visible"
-          variants={{
-            visible: { transition: { staggerChildren: 0.05 } },
-          }}
+          className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
         >
-          {CITIES.map((city) => {
-            const active = city.id === selected.id;
-            return (
-              <motion.button
-                key={city.id}
-                onClick={() => selectCity(city)}
-                variants={{
-                  hidden: { opacity: 0, y: 10 },
-                  visible: { opacity: 1, y: 0 },
-                }}
-                whileHover={{ scale: 1.06, y: -2 }}
-                whileTap={{ scale: 0.96 }}
-                transition={spring}
-                className={`relative rounded-full px-4 py-1.5 text-sm transition-colors ${
-                  active
-                    ? "text-white"
-                    : "text-white/60 hover:text-white/90"
-                }`}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="city-pill"
-                    className="absolute inset-0 rounded-full bg-blue-500/25 ring-1 ring-blue-400/40"
-                    transition={spring}
-                  />
-                )}
-                <span className="relative">{city.name}</span>
-              </motion.button>
-            );
-          })}
+          <CitySearch current={selected} onSelect={selectCity} loading={loading} />
+
+          {/* 当前城市标签 */}
+          <motion.div
+            key={selected.id}
+            className="flex items-center gap-2 text-sm"
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={spring}
+          >
+            <span className="text-white/35">当前</span>
+            <span className="rounded-full bg-blue-500/20 px-3 py-1 text-blue-200 ring-1 ring-blue-400/30">
+              {selected.name}
+            </span>
+            {selected.region && (
+              <span className="hidden text-xs text-white/35 sm:inline">
+                {selected.region}
+              </span>
+            )}
+          </motion.div>
         </motion.div>
 
         {error && (

@@ -134,8 +134,18 @@ function weekdayOf(iso: string): string {
  * 拉取某城市的天气数据。
  *
  * 使用 Open-Meteo forecast 接口，一次请求拿到 current / hourly / daily。
+ *
+ * 参数只需含坐标、时区和名称即可，因此 City 和 city-search 的 CityEntry
+ * 都能直接传入 —— 用结构类型而不是绑定具体类型。
  */
-export async function fetchWeather(city: City): Promise<WeatherData> {
+export async function fetchWeather(
+  city: Pick<City, "name"> & {
+    country?: string;
+    latitude: number;
+    longitude: number;
+    timezone?: string;
+  }
+): Promise<WeatherData> {
   const params = new URLSearchParams({
     latitude: String(city.latitude),
     longitude: String(city.longitude),
@@ -164,7 +174,7 @@ export async function fetchWeather(city: City): Promise<WeatherData> {
       "sunrise",
       "sunset",
     ].join(","),
-    timezone: city.timezone,
+    timezone: city.timezone ?? "Asia/Shanghai",
     forecast_days: "7",
   });
 
@@ -223,7 +233,14 @@ export async function fetchWeather(city: City): Promise<WeatherData> {
   }));
 
   return {
-    city,
+    city: {
+      id: "id" in city ? String(city.id) : `${city.latitude},${city.longitude}`,
+      name: city.name,
+      country: city.country ?? "中国",
+      latitude: city.latitude,
+      longitude: city.longitude,
+      timezone: city.timezone ?? "Asia/Shanghai",
+    },
     current: {
       temperature: json.current?.temperature_2m ?? 0,
       apparentTemperature: json.current?.apparent_temperature ?? 0,

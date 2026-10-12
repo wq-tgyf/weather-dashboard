@@ -13,11 +13,13 @@ import { Suspense } from "react";
 
 import { WeatherDashboard } from "@/components/weather-dashboard";
 import { DashboardSkeleton } from "@/components/dashboard-skeleton";
-import { CITIES, fetchWeather } from "@/lib/weather";
+import { fetchWeather } from "@/lib/weather";
+import { getDefaultCity } from "@/lib/city-search";
 
 async function DashboardData() {
-  const data = await fetchWeather(CITIES[0]);
-  return <WeatherDashboard initialData={data} />;
+  const city = getDefaultCity();
+  const data = await fetchWeather(city);
+  return <WeatherDashboard initialData={data} initialCity={city} />;
 }
 
 export default function Home() {
