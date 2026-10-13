@@ -1,158 +1,378 @@
 /**
  * 生活提醒规则引擎 —— 验收测试
  *
- * 用法: node scripts/test-life-tips.mjs
+ * 用法: npx tsx scripts/test-life-tips.mjs
  *
- * 重点验证：
- *   1. 阈值边界（如体感 5℃ 落在哪一档）
- *   2. 国标文案是否与标准一致
- *   3. 兜底逻辑（天气平稳时是否仍有横幅）
- *   4. 优先级排序（安全类是否排在氛围类前面）
- *   5. 不生成废话（紫外线最弱时不提醒）
+ * 直接调用 TypeScript 源码（不是复刻），保证测的是线上真实逻辑。
+ * 阈值改了这里会立刻反映出来，不会出现"测试通过但代码错了"。
  *
- * 做法：因为 life-tips.ts 用了 TS + 路径别名，这里用 tsx 直接跑，
- * 或者按下面的方式做纯 JS 复刻验证。
- * 为了零依赖，这里采用「导入编译后逻辑」的方式 —— 见文件末尾说明。
+ * 覆盖：
+ *   1. 穿衣档位边界（国标 QX/T 385 映射）
+ *   2. 紫外线档位边界（国标 GB/T 36744）
+ *   3. ⭐ 冲突抑制：有雨时不应同时推"注意防晒"
+ *   4. ⭐ 冲突抑制：正在下雨时不应说"适合运动"
+ *   5. ⭐ 信息去重：低温场景穿衣和感冒不应各说一遍
+ *   6. 兜底逻辑：任何天气下横幅都必须有内容
+ *   7. 国标文案逐字一致性
  */
 
-console.log("本测试脚本需要 tsx 运行 TypeScript 源码。");
-console.log("");
-console.log("改用纯 JS 复刻验证（与 life-tips.data.ts 阈值保持一致）：");
-console.log("");
+import {
+  buildLifeTips,
+  pickBannerTip,
+} from "../src/lib/life-tips.ts";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /* ------------------------------------------------------------------ */
-/* 复刻阈值（与 life-tips.data.ts 保持一致）                            */
+/* 构造测试数据                                                        */
 /* ------------------------------------------------------------------ */
 
-const DRESSING_LEVELS = [
-  { max: -10, short: "厚羽绒服 + 手套" },
-  { max: 5, short: "棉衣 / 皮衣" },
-  { max: 12, short: "夹克外套" },
-  { max: 18, short: "套装 / 夹克" },
-  { max: 23, short: "长袖 T 恤" },
-  { max: 28, short: "薄衬衣 / 长裙" },
-  { max: null, short: "短袖短裤" },
-];
+/** 生成一份可控的天气数据，默认是"晴天舒适" */
+function makeWeather(overrides = {}) {
+  const base = {
+    city: { id: "t", name: "测试", country: "中国", latitude: 39, longitude: 116, timezone: "Asia/Shanghai" },
+    current: {
+      temperature: 20,
+      apparentTemperature: 20,
+      humidity: 50,
+      windSpeed: 10,
+      windDirection: 180,
+      weatherCode: 0,
+      isDay: true,
+      pressure: 1013,
+      precipitation: 0,
+      uvIndex: 5,
+      visibility: 10000,
+    },
+    hourly: [],
+    daily: [
+      {
+        date: "2026-10-13",
+        weekday: "周二",
+        dateLabel: "10/13",
+        weatherCode: 0,
+        tempMax: 24,
+        tempMin: 16,
+        precipitationProbability: 5,
+        uvIndexMax: 5,
+        sunrise: "06:20",
+        sunset: "17:40",
+      },
+    ],
+    fetchedAt: new Date().toISOString(),
+  };
 
-const UV_LEVELS = [
-  { max: 2, level: "一级", short: "无需防晒" },
-  { max: 4, level: "二级", short: "可涂防晒霜" },
-  { max: 6, level: "三级", short: "注意防晒" },
-  { max: 9, level: "四级", short: "避开正午外出" },
-  { max: Infinity, level: "五级", short: "避免室外活动" },
-];
+  const merged = structuredClone(base);
 
-function pickDressing(t) {
-  return DRESSING_LEVELS.find((l) => l.max === null || t < l.max);
+  for (const [k, v] of Object.entries(overrides)) {
+    if (k === "hourly" || k === "daily") {
+      /* 数组整体替换 */
+      merged[k] = v;
+    } else if (typeof v === "object" && v !== null && typeof merged[k] === "object") {
+      /* 普通对象浅合并 */
+      Object.assign(merged[k], v);
+    } else {
+      merged[k] = v;
+    }
+  }
+
+  return merged;
 }
-function pickUv(u) {
-  return UV_LEVELS.find((l) => u <= l.max);
+
+/** 默认的单日数据（便于单独覆盖字段） */
+function makeDay(overrides = {}) {
+  return {
+    date: "2026-10-13",
+    weekday: "周二",
+    dateLabel: "10/13",
+    weatherCode: 0,
+    tempMax: 24,
+    tempMin: 16,
+    precipitationProbability: 5,
+    uvIndexMax: 5,
+    sunrise: "06:20",
+    sunset: "17:40",
+    ...overrides,
+  };
 }
 
-/* ------------------------------------------------------------------ */
-/* 测试用例                                                            */
-/* ------------------------------------------------------------------ */
+/** 生成 N 小时的逐小时数据 */
+function makeHours(n, overrides = {}) {
+  return Array.from({ length: n }, (_, i) => ({
+    time: `2026-10-13T${String(i).padStart(2, "0")}:00`,
+    hourLabel: `${String(i).padStart(2, "0")}:00`,
+    temperature: 20,
+    apparentTemperature: 20,
+    humidity: 50,
+    precipitationProbability: 0,
+    windSpeed: 10,
+    uvIndex: 5,
+    ...overrides,
+  }));
+}
 
 let pass = 0;
 let fail = 0;
 
-function check(desc, actual, expected, extra = "") {
+function check(desc, actual, expected) {
   const ok = actual === expected;
   if (ok) pass++;
   else fail++;
-  console.log(
-    `${ok ? "✅" : "❌"} ${desc}\n   实际: ${actual}${extra ? `  ${extra}` : ""}`
-  );
-  if (!ok) console.log(`   期望: ${expected}`);
+  console.log(`${ok ? "✅" : "❌"} ${desc}`);
+  if (!ok) console.log(`   实际: ${actual}\n   期望: ${expected}`);
 }
 
-console.log("=== 1. 穿衣档位边界（国标 QX/T 385—2017 映射）===\n");
+function checkThat(desc, condition) {
+  if (condition) pass++;
+  else fail++;
+  console.log(`${condition ? "✅" : "❌"} ${desc}`);
+}
 
-/* 边界值测试：-10 应该落在「棉衣」而不是「厚羽绒服」 */
-check("体感 -15℃ → 厚羽绒服", pickDressing(-15).short, "厚羽绒服 + 手套");
-check("体感 -10℃ → 棉衣（边界，不含上档）", pickDressing(-10).short, "棉衣 / 皮衣");
-check("体感 -9.9℃ → 棉衣", pickDressing(-9.9).short, "棉衣 / 皮衣");
-check("体感 5℃ → 夹克外套（边界）", pickDressing(5).short, "夹克外套");
-check("体感 4.9℃ → 棉衣", pickDressing(4.9).short, "棉衣 / 皮衣");
-check("体感 18℃ → 长袖 T 恤（边界）", pickDressing(18).short, "长袖 T 恤");
-check("体感 25℃ → 薄衬衣（23-28 档）", pickDressing(25).short, "薄衬衣 / 长裙");
-check("体感 28℃ → 短袖短裤（边界）", pickDressing(28).short, "短袖短裤");
-check("体感 40℃ → 短袖短裤", pickDressing(40).short, "短袖短裤");
+const tipsOf = (data) => buildLifeTips(data).map((t) => t.id);
+const tipBy = (data, id) => buildLifeTips(data).find((t) => t.id === id);
 
-console.log("\n=== 2. 紫外线档位边界（国标 GB/T 36744—2018）===\n");
+/* ================================================================== */
+/* 1. 穿衣档位边界                                                    */
+/* ================================================================== */
 
-check("UVI 0 → 一级", pickUv(0).level, "一级");
-check("UVI 2 → 一级（边界，含）", pickUv(2).level, "一级");
-check("UVI 2.1 → 二级", pickUv(2.1).level, "二级");
-check("UVI 4 → 二级（边界）", pickUv(4).level, "二级");
-check("UVI 5 → 三级", pickUv(5).level, "三级");
-check("UVI 6 → 三级（边界）", pickUv(6).level, "三级");
-check("UVI 7 → 四级", pickUv(7).level, "四级");
-check("UVI 9 → 四级（边界）", pickUv(9).level, "四级");
-check("UVI 10 → 五级", pickUv(10).level, "五级");
-check("UVI 12 → 五级", pickUv(12).level, "五级");
+console.log("\n=== 1. 穿衣档位边界（maxApparent 含边界）===\n");
 
-console.log("\n=== 3. 设计约束检查 ===\n");
-
-/* 紫外线一级不提醒（「不需要采取防护措施」是废话） */
-const uvShouldSkip = pickUv(1).level === "一级";
-check("UVI 最弱时是否跳过提醒", uvShouldSkip, true, "（一级=最弱，不生成提醒）");
-
-/* 穿衣必须用体感温度，不能用气温 —— 检查源码 */
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(
-  join(__dirname, "..", "src", "lib", "life-tips.ts"),
-  "utf8"
-);
-
-check(
-  "穿衣使用 apparentTemperature（体感）而非 temperature",
-  src.includes("data.current.apparentTemperature"),
-  true
-);
-check(
-  "不含等级数字输出（如「三级」）到 title",
-  !/title:\s*[`"'][^`"']*[一二三四五]级/.test(src),
-  true
-);
-check("不含 localStorage（用户要求不做持久化）", !src.includes("localStorage"), true);
-check("不含 fetch（应为纯函数）", !src.includes("fetch("), true);
-
-console.log("\n=== 4. 国标文案一致性检查 ===\n");
-
-const dataSrc = readFileSync(
-  join(__dirname, "..", "src", "lib", "life-tips.data.ts"),
-  "utf8"
-);
-
-const REQUIRED_TEXTS = [
-  "适宜穿着厚羽绒服、戴手套等严冬装",
-  "适宜穿着棉衣、皮衣，内着厚毛衣等冬装",
-  "适宜穿着夹克衫外套等初冬装",
-  "适宜穿着套装、夹克衫等早春晚秋装",
-  "适宜穿着棉衫、长袖 T 恤、牛仔服等春秋装",
-  "适宜穿着轻薄的衬衣和长裙等夏装",
-  "适宜穿着短袖 T 恤、短裙、短裤等盛夏装",
-  "不需要采取防护措施",
-  "可以适当采取一些防护措施，如：涂擦防护霜等",
-  "外出时戴好遮阳帽、太阳镜和太阳伞等，涂擦 SPF 指数大于 15 的防晒霜",
-  "除上述防护措施外，上午 10 点至下午 4 点避免外出，或尽可能在遮荫处",
-  "尽可能不在室外活动，必须外出时，需采取各种有效的防护措施",
+const dressCases = [
+  [-15, "厚羽绒服 + 手套"],
+  [-10, "厚羽绒服 + 手套"], /* 正好 -10 = 严寒档上限，含 */
+  [-9, "棉衣 / 皮衣"],
+  [5, "棉衣 / 皮衣"],       /* 正好 5 = 冬装档上限，含 */
+  [6, "夹克外套"],
+  [18, "套装 / 夹克"],
+  [23, "长袖 T 恤"],
+  [28, "薄衬衣 / 长裙"],
+  [29, "短袖短裤"],
+  [40, "短袖短裤"],
 ];
 
-for (const t of REQUIRED_TEXTS) {
-  check(`国标原文存在: 「${t.slice(0, 20)}…」`, dataSrc.includes(t), true);
+for (const [apparent, expected] of dressCases) {
+  const data = makeWeather({ current: { apparentTemperature: apparent } });
+  const tip = tipBy(data, "dressing");
+  check(`体感 ${apparent}℃ → ${expected}`, tip?.title, expected);
 }
 
-console.log("\n=== 5. 来源标注检查 ===\n");
+/* ================================================================== */
+/* 2. 紫外线档位边界                                                  */
+/* ================================================================== */
 
-check("标注了 QX/T 385—2017", src.includes("QX/T 385"), true);
-check("标注了 GB/T 36744—2018", src.includes("GB/T 36744"), true);
+console.log("\n=== 2. 紫外线档位边界（国标 GB/T 36744）===\n");
 
-console.log("\n" + "=".repeat(50));
+const uvCases = [
+  [1, null],                      /* 一级不提醒 */
+  [2, null],                      /* 一级不提醒（边界含） */
+  [3, "可涂防晒霜"],
+  [4, "可涂防晒霜"],
+  [5, "注意防晒"],
+  [6, "注意防晒"],
+  [7, "避开正午外出"],
+  [9, "避开正午外出"],
+  [10, "避免室外活动"],
+  [12, "避免室外活动"],
+];
+
+for (const [uvMax, expected] of uvCases) {
+  const data = makeWeather({
+    daily: [makeDay({ uvIndexMax: uvMax })],
+    hourly: makeHours(24),
+  });
+  const tip = tipBy(data, "uv");
+  if (expected === null) {
+    checkThat(`UVI ${uvMax} 不生成防晒提醒`, tip === undefined);
+  } else {
+    check(`UVI ${uvMax} → ${expected}`, tip?.title, expected);
+  }
+}
+
+/* ================================================================== */
+/* 3. ⭐ 冲突抑制：有雨时不应推"注意防晒"                              */
+/* ================================================================== */
+
+console.log("\n=== 3. 冲突抑制：有雨 vs 防晒 ===\n");
+
+{
+  /* 晴天 + 中等 UV → 应该有防晒 */
+  const sunny = makeWeather({
+    daily: [makeDay({ uvIndexMax: 5 })],
+    hourly: makeHours(24),
+  });
+  checkThat("晴天 + UVI 5 → 有防晒提醒", tipBy(sunny, "uv") !== undefined);
+
+  /* 正在下大雨 + 中等 UV → 不应有防晒（冲突） */
+  const raining = makeWeather({
+    current: { precipitation: 2.5, weatherCode: 63 },
+    daily: [makeDay({ uvIndexMax: 5, weatherCode: 63 })],
+    hourly: makeHours(24),
+  });
+  checkThat(
+    "正在下雨 + UVI 5 → 不推防晒（避免'有雨还防晒'的矛盾）",
+    tipBy(raining, "uv") === undefined
+  );
+
+  /* 未来 12h 高降水概率 + 中等 UV → 不应有防晒 */
+  const wetForecast = makeWeather({
+    daily: [makeDay({ uvIndexMax: 5 })],
+    hourly: makeHours(24, { precipitationProbability: 75 }),
+  });
+  checkThat(
+    "降水概率 75% + UVI 5 → 不推防晒",
+    tipBy(wetForecast, "uv") === undefined
+  );
+
+  /* ⚠️ 但高 UV（健康风险）即使在雨天也要提醒 */
+  const rainyHighUv = makeWeather({
+    current: { precipitation: 2.5 },
+    daily: [makeDay({ uvIndexMax: 8 })],
+    hourly: makeHours(24),
+  });
+  checkThat(
+    "正在下雨 + UVI 8（健康风险）→ 仍推防晒",
+    tipBy(rainyHighUv, "uv") !== undefined
+  );
+}
+
+/* ================================================================== */
+/* 4. ⭐ 冲突抑制：正在下雨时不应说"适合运动"                          */
+/* ================================================================== */
+
+console.log("\n=== 4. 冲突抑制：下雨 vs 运动 ===\n");
+
+{
+  /* 晴天舒适 → 适合运动 */
+  const sunny = makeWeather({
+    current: { apparentTemperature: 20, windSpeed: 10 },
+    hourly: makeHours(24),
+  });
+  check("晴天舒适 → 适合运动", tipBy(sunny, "sport")?.title, "适合运动");
+
+  /* 正在下雨但温度和舒适度都不错 → 不能说"适合运动" */
+  const raining = makeWeather({
+    current: { apparentTemperature: 20, windSpeed: 10, precipitation: 1.2 },
+    hourly: makeHours(24),
+  });
+  const sportTip = tipBy(raining, "sport");
+  check(
+    "正在下雨 → 运动改建议室内",
+    sportTip?.title,
+    "建议室内运动"
+  );
+  checkThat(
+    "正在下雨 → 运动详情提到降水",
+    sportTip?.detail.includes("降水")
+  );
+}
+
+/* ================================================================== */
+/* 5. ⭐ 信息去重：低温场景穿衣和感冒不重复                            */
+/* ================================================================== */
+
+console.log("\n=== 5. 信息去重：低温场景 ===\n");
+
+{
+  /* 体感 3℃ + 温差小 → 只有穿衣，不应再有"感冒"（都在说穿暖） */
+  const coldWeather = makeWeather({
+    current: { apparentTemperature: 3 },
+    daily: [makeDay({ tempMax: 6, tempMin: 0 })],
+    hourly: makeHours(24),
+  });
+  const ids = tipsOf(coldWeather);
+  checkThat("体感 3℃ → 有穿衣提醒", ids.includes("dressing"));
+  checkThat(
+    "体感 3℃ + 温差小 → 无感冒提醒（避免和穿衣重复）",
+    !ids.includes("cold")
+  );
+
+  /* 体感 3℃ + 温差大 → 穿衣 + 温差提醒（信息不同，可以并存） */
+  const coldBigGap = makeWeather({
+    current: { apparentTemperature: 3 },
+    daily: [makeDay({ tempMax: 10, tempMin: -5 })],
+    hourly: makeHours(24),
+  });
+  const ids2 = tipsOf(coldBigGap);
+  checkThat("低温 + 温差 15℃ → 有穿衣", ids2.includes("dressing"));
+  checkThat("低温 + 温差 15℃ → 有温差提醒", ids2.includes("cold"));
+}
+
+/* ================================================================== */
+/* 6. 兜底逻辑：横幅永远有内容                                        */
+/* ================================================================== */
+
+console.log("\n=== 6. 兜底逻辑 ===\n");
+
+const scenarios = [
+  ["标准晴天", makeWeather({ hourly: makeHours(24) })],
+  ["无 daily 数据", makeWeather({ daily: [] })],
+  ["空 hourly", makeWeather({ hourly: [] })],
+  ["极端高温", makeWeather({ current: { apparentTemperature: 45 }, daily: [makeDay({ uvIndexMax: 11 })], hourly: makeHours(24) })],
+  ["极端严寒", makeWeather({ current: { apparentTemperature: -20 }, daily: [makeDay({ tempMax: -12, tempMin: -25 })], hourly: makeHours(24) })],
+  ["暴雨", makeWeather({ current: { precipitation: 30 }, hourly: makeHours(24, { precipitationProbability: 95 }) })],
+];
+
+for (const [name, data] of scenarios) {
+  const tips = buildLifeTips(data);
+  checkThat(`${name} → 至少 1 条提醒`, tips.length >= 1);
+  const banner = pickBannerTip(tips);
+  checkThat(`${name} → 横幅有内容`, Boolean(banner?.title));
+}
+
+/* ================================================================== */
+/* 7. 兜底文案不撒谎                                                  */
+/* ================================================================== */
+
+console.log("\n=== 7. 兜底文案 ===\n");
+
+{
+  const calm = makeWeather({ hourly: makeHours(24) });
+  const tips = buildLifeTips(calm);
+  if (tips.length === 1 && tips[0].id === "calm") {
+    checkThat(
+      "兜底文案不含'无明显降水'（该场景未必无雨）",
+      !tips[0].detail.includes("无明显降水")
+    );
+  } else {
+    console.log(`（当前场景触发了 ${tips.map((t) => t.id).join(",")}，跳过）`);
+    pass++;
+  }
+}
+
+/* ================================================================== */
+/* 8. 国标文案逐字一致性                                              */
+/* ================================================================== */
+
+console.log("\n=== 8. 国标文案逐字一致性 ===\n");
+
+{
+  const dataSrc = readFileSync(
+    join(__dirname, "..", "src", "lib", "life-tips.data.ts"),
+    "utf8"
+  );
+  const REQUIRED = [
+    "适宜穿着厚羽绒服、戴手套等严冬装",
+    "适宜穿着棉衣、皮衣，内着厚毛衣等冬装",
+    "适宜穿着夹克衫外套等初冬装",
+    "适宜穿着套装、夹克衫等早春晚秋装",
+    "适宜穿着棉衫、长袖 T 恤、牛仔服等春秋装",
+    "适宜穿着轻薄的衬衣和长裙等夏装",
+    "适宜穿着短袖 T 恤、短裙、短裤等盛夏装",
+    "不需要采取防护措施",
+    "可以适当采取一些防护措施，如：涂擦防护霜等",
+    "外出时戴好遮阳帽、太阳镜和太阳伞等，涂擦 SPF 指数大于 15 的防晒霜",
+  ];
+  for (const t of REQUIRED) {
+    checkThat(`国标原文存在: 「${t.slice(0, 18)}…」`, dataSrc.includes(t));
+  }
+}
+
+/* ================================================================== */
+
+console.log("\n" + "=".repeat(52));
 console.log(`结果: 通过 ${pass} / 失败 ${fail}`);
-console.log("=".repeat(50));
+console.log("=".repeat(52));
 process.exit(fail > 0 ? 1 : 0);

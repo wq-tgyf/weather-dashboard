@@ -185,10 +185,10 @@ export function WeatherDashboard({
         >
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              <h1 className="text-3xl font-semibold sm:text-4xl">
                 全球天气看板
               </h1>
-              <p className="mt-1.5 text-sm text-muted-foreground">
+              <p className="mt-1.5 text-sm font-normal text-ink-secondary">
                 数据来源 Open-Meteo · 实时更新
               </p>
             </div>

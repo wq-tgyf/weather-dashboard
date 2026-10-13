@@ -90,11 +90,11 @@ function isStormCode(code: number): boolean {
   return code >= 95;
 }
 
-/** 匹配穿衣档位 */
+/** 匹配穿衣档位（maxApparent 含边界，即该档的最高体感温度） */
 function pickDressing(apparent: number) {
   return (
     DRESSING_LEVELS.find(
-      (l) => l.maxApparent === null || apparent < l.maxApparent
+      (l) => l.maxApparent === null || apparent <= l.maxApparent
     ) ?? DRESSING_LEVELS[DRESSING_LEVELS.length - 1]
   );
 }
@@ -111,11 +111,13 @@ function pickSport(
   precipProbability: number
 ) {
   for (const level of SPORT_LEVELS) {
+    /* 用 <= 而不是 < 匹配上限，避免边界值（如体感正好 25℃）
+       被误降到下一档。25℃ 本身是很舒适的运动温度。 */
     if (
       apparent >= level.minApparent &&
-      apparent < level.maxApparent &&
-      windSpeed < level.maxWindSpeed &&
-      precipProbability < level.maxPrecipProbability
+      apparent <= level.maxApparent &&
+      windSpeed <= level.maxWindSpeed &&
+      precipProbability <= level.maxPrecipProbability
     ) {
       return level;
     }
@@ -220,6 +222,20 @@ function tipDressing(data: WeatherData): LifeTip {
   const apparent = data.current.apparentTemperature;
   const level = pickDressing(apparent);
 
+  /* ⚠️ 冲突抑制：正在下雨时，穿衣建议要加防水考虑。
+     否则会出现「适宜穿着轻薄衬衣」配「正在下雨」——
+     用户按提示穿薄衣服出门会被淋透。 */
+  const rainingNow = data.current.precipitation > 0;
+  const wetWeather =
+    rainingNow ||
+    (data.daily[0]?.weatherCode ?? 0) >= 51 ||
+    peakPrecipitation(data, UMBRELLA.lookaheadHours).probability >=
+      UMBRELLA.mustBringProbability;
+
+  const detail = wetWeather
+    ? `体感 ${apparent.toFixed(0)}℃，${level.text}，有降水需注意防雨保暖。`
+    : `体感 ${apparent.toFixed(0)}℃，${level.text}。`;
+
   let severity: LifeTip["severity"] = "info";
   if (apparent <= -10 || apparent >= 33) severity = "warning";
   else if (apparent <= 5 || apparent >= 28) severity = "advice";
@@ -228,7 +244,7 @@ function tipDressing(data: WeatherData): LifeTip {
     id: "dressing",
     icon: level.icon,
     title: level.short,
-    detail: `体感 ${apparent.toFixed(0)}℃，${level.text}。`,
+    detail,
     severity,
     score:
       (apparent <= -10 || apparent >= 33
@@ -249,6 +265,25 @@ function tipUv(data: WeatherData): LifeTip | null {
   if (todayMax <= 2) return null;
 
   const level = pickUv(todayMax);
+
+  /* ⚠️ 冲突抑制：云和雨会大幅削弱紫外线。
+     如果今天明显要下雨/正在下雨，再推「注意防晒」就显得自相矛盾
+     （用户看到会困惑："到底要不要防晒？"）。
+     阈值取 50% —— 与带伞的「可能有雨」区间对齐，宁可不推也不错推。 */
+  const { probability: precipProb } = peakPrecipitation(
+    data,
+    UMBRELLA.lookaheadHours
+  );
+  const rainingNow = data.current.precipitation > 0;
+  const wetWeather =
+    rainingNow ||
+    precipProb >= UMBRELLA.mustBringProbability ||
+    (data.daily[0]?.weatherCode ?? 0) >= 51;
+
+  if (wetWeather && todayMax < 7) {
+    /* 雨天只在高 UV（≥7，健康风险）时才例外提醒 */
+    return null;
+  }
 
   let severity: LifeTip["severity"] = "info";
   if (todayMax >= 7) severity = "warning";
@@ -273,8 +308,19 @@ function tipSport(data: WeatherData): LifeTip {
   const apparent = data.current.apparentTemperature;
   const { probability } = peakPrecipitation(data, UMBRELLA.lookaheadHours);
   const wind = data.current.windSpeed;
+  const rainingNow = data.current.precipitation > 0;
 
-  const level = pickSport(apparent, wind, probability);
+  /* ⚠️ 冲突抑制：正在下雨时不能说「适合运动」。
+     pickSport 只用概率判断，不感知"当下正在下雨"这个事实，
+     会出现「正在下雨 + 适合运动」这种荒谬组合。 */
+  const level = rainingNow
+    ? SPORT_LEVELS[SPORT_LEVELS.length - 1]
+    : pickSport(apparent, wind, probability);
+
+  /* 文案跟着「正在下雨」这个事实走，而不是套模板 */
+  const text = rainingNow
+    ? "当前正在降水，建议改为室内运动，若户外运动请注意防滑与保暖。"
+    : level.text;
 
   let severity: LifeTip["severity"] = "info";
   if (level.label === "较不宜") severity = "advice";
@@ -283,12 +329,16 @@ function tipSport(data: WeatherData): LifeTip {
     id: "sport",
     icon: level.icon,
     title: level.short,
-    detail: level.text,
+    detail: text,
     severity,
-    score:
-      SEVERITY_WEIGHT.generalLife *
-      TIMELINESS_FACTOR.today *
-      CERTAINTY_FACTOR.trend,
+    /* 正在下雨属"当前实况"，时效系数最高 */
+    score: rainingNow
+      ? SEVERITY_WEIGHT.generalLife *
+        TIMELINESS_FACTOR.within3h *
+        CERTAINTY_FACTOR.happening
+      : SEVERITY_WEIGHT.generalLife *
+        TIMELINESS_FACTOR.today *
+        CERTAINTY_FACTOR.trend,
     source: "和风天气 / 华风爱科 运动指数分档",
     bannerWorthy: false,
   };
@@ -299,39 +349,27 @@ function tipCold(data: WeatherData): LifeTip | null {
   if (!today) return null;
 
   const gap = today.tempMax - today.tempMin;
-  const apparent = data.current.apparentTemperature;
 
   const bigGap = gap >= COLD.tempGapThreshold;
-  const cold = apparent < COLD.lowApparentThreshold;
 
-  if (!bigGap && !cold) return null;
-
-  if (bigGap) {
-    return {
-      id: "cold",
-      icon: "🤧",
-      title: `昼夜温差 ${Math.round(gap)}℃`,
-      detail: `昼夜温差达 ${Math.round(gap)}℃，是感冒等呼吸系统疾病的高发期，建议洋葱式穿衣，注意预防。`,
-      severity: gap >= 12 ? "advice" : "info",
-      score:
-        (gap >= 12 ? SEVERITY_WEIGHT.health : SEVERITY_WEIGHT.strongLife) *
-        TIMELINESS_FACTOR.today *
-        CERTAINTY_FACTOR.trend,
-      source: "Open-Meteo 日最高/最低气温",
-      bannerWorthy: gap >= 12,
-    };
-  }
+  /* ⚠️ 只保留「温差大」这一个触发条件。
+     原来还有「体感 < 5℃」的分支，但它和穿衣提醒说的是同一件事
+     （体感 3℃ → 穿衣提示"棉衣/皮衣"、感冒提示"注意保暖"），
+     同时出现等于把同样的信息说两遍。穿衣已覆盖低温，这里不重复。 */
+  if (!bigGap) return null;
 
   return {
     id: "cold",
     icon: "🤧",
-    title: "气温偏低，注意保暖",
-    detail: `体感仅 ${apparent.toFixed(0)}℃，是感冒等呼吸系统疾病的高发期，注意预防。`,
-    severity: "advice",
+    title: `昼夜温差 ${Math.round(gap)}℃`,
+    detail: `昼夜温差达 ${Math.round(gap)}℃，是感冒等呼吸系统疾病的高发期，建议洋葱式穿衣，注意预防。`,
+    severity: gap >= 12 ? "advice" : "info",
     score:
-      SEVERITY_WEIGHT.health * TIMELINESS_FACTOR.today * CERTAINTY_FACTOR.happening,
-    source: "Open-Meteo 体感温度",
-    bannerWorthy: false,
+      (gap >= 12 ? SEVERITY_WEIGHT.health : SEVERITY_WEIGHT.strongLife) *
+      TIMELINESS_FACTOR.today *
+      CERTAINTY_FACTOR.trend,
+    source: "Open-Meteo 日最高/最低气温",
+    bannerWorthy: gap >= 12,
   };
 }
 
@@ -341,15 +379,17 @@ function tipCold(data: WeatherData): LifeTip | null {
 
 /** 天气平稳时的兜底提醒 —— 保证横幅始终有内容 */
 function tipCalm(data: WeatherData): LifeTip {
-  const desc = data.current.weatherCode;
   const high = data.daily[0]?.tempMax ?? data.current.temperature;
   const low = data.daily[0]?.tempMin ?? data.current.temperature;
 
+  /* ⚠️ 别硬说「无明显降水」—— 这个兜底在某些有雨但其他提醒全被
+     抑制的场景下也会被调用，那时这句话就是假的。
+     改成中性描述：只陈述温度，不代天气下结论。 */
   return {
     id: "calm",
     icon: "🌤️",
-    title: "天气平稳，适合出行",
-    detail: `今天${high.toFixed(0)} / ${low.toFixed(0)}℃，无明显降水，适合正常出行。`,
+    title: "今日天气平稳",
+    detail: `今天 ${high.toFixed(0)} / ${low.toFixed(0)}℃，适合正常出行。`,
     severity: "info",
     score: SEVERITY_WEIGHT.ambient,
     source: "Open-Meteo 综合判断",
