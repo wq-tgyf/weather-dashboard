@@ -45,3 +45,6 @@ NEXT16-BRIEF.md
 
 # 坐标补齐的中间缓存（可重新生成）
 scripts/coords-cache.json
+
+# 临时提交信息
+scripts/.commit-msg.txt
