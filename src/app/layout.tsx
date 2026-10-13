@@ -29,8 +29,8 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "全球天气看板",
-  description: "基于 Open-Meteo 实时数据的天气可视化看板",
+  title: "全国天气看板",
+  description: "基于 Open-Meteo 实时数据的全国城市天气可视化看板",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

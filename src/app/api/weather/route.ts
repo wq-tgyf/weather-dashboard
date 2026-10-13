@@ -1,9 +1,9 @@
 /**
  * 天气数据接口
  *
- * 用法（两种都支持）：
- *   GET /api/weather?city=beijing                  ← 兼容旧的固定城市 id
- *   GET /api/weather?lat=39.9&lon=116.4&name=北京   ← 搜索选中的任意城市
+ * 用法：
+ *   GET /api/weather?lat=39.9&lon=116.4&name=北京   ← 主路径（搜索选中的城市）
+ *   GET /api/weather                                 ← 无参数默认北京
  *
  * 注意（Next.js 16）：
  * - Route Handler 签名是 (request, context)
@@ -13,7 +13,8 @@
 
 import { NextResponse } from "next/server";
 
-import { CITIES, fetchWeather, getCity } from "@/lib/weather";
+import { fetchWeather } from "@/lib/weather";
+import { getDefaultCity } from "@/lib/city-search";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -21,7 +22,6 @@ export async function GET(request: Request) {
   const latParam = searchParams.get("lat");
   const lonParam = searchParams.get("lon");
   const nameParam = searchParams.get("name");
-  const cityId = searchParams.get("city");
 
   let target: {
     name: string;
@@ -56,12 +56,15 @@ export async function GET(request: Request) {
       latitude,
       longitude,
     };
-  } else if (cityId) {
-    /* 兼容旧的固定城市 id */
-    target = getCity(cityId);
   } else {
-    /* 默认北京 */
-    target = CITIES[0];
+    /* 无参数 → 默认城市（与首页首屏一致，来自同一套城市体系） */
+    const city = getDefaultCity();
+    target = {
+      name: city.name,
+      country: "中国",
+      latitude: city.latitude,
+      longitude: city.longitude,
+    };
   }
 
   try {

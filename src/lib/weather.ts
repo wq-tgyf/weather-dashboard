@@ -19,21 +19,6 @@ export type City = {
   timezone: string;
 };
 
-export const CITIES: City[] = [
-  { id: "beijing", name: "北京", country: "中国", latitude: 39.9042, longitude: 116.4074, timezone: "Asia/Shanghai" },
-  { id: "shanghai", name: "上海", country: "中国", latitude: 31.2304, longitude: 121.4737, timezone: "Asia/Shanghai" },
-  { id: "guangzhou", name: "广州", country: "中国", latitude: 23.1291, longitude: 113.2644, timezone: "Asia/Shanghai" },
-  { id: "chengdu", name: "成都", country: "中国", latitude: 30.5728, longitude: 104.0668, timezone: "Asia/Shanghai" },
-  { id: "tokyo", name: "东京", country: "日本", latitude: 35.6762, longitude: 139.6503, timezone: "Asia/Tokyo" },
-  { id: "london", name: "伦敦", country: "英国", latitude: 51.5074, longitude: -0.1278, timezone: "Europe/London" },
-  { id: "newyork", name: "纽约", country: "美国", latitude: 40.7128, longitude: -74.006, timezone: "America/New_York" },
-  { id: "sydney", name: "悉尼", country: "澳大利亚", latitude: -33.8688, longitude: 151.2093, timezone: "Australia/Sydney" },
-];
-
-export function getCity(id: string): City {
-  return CITIES.find((c) => c.id === id) ?? CITIES[0];
-}
-
 /** WMO 天气代码 → 中文描述 + 图标标识 */
 export const WEATHER_CODES: Record<number, { label: string; icon: string }> = {
   0: { label: "晴", icon: "sun" },
