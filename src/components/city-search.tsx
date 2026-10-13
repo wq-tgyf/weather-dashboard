@@ -41,11 +41,6 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
     return searchCities(query, { limit: 8 });
   }, [query]);
 
-  /* 高亮项归零 */
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [query]);
-
   /* 点击外部关闭 */
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -99,10 +94,7 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
   return (
     <div ref={containerRef} className="relative w-full sm:max-w-md">
       {/* 输入框 */}
-      <motion.div
-        className="relative flex items-center"
-        whileFocus={{ scale: 1.01 }}
-      >
+      <div className="relative flex items-center">
         <Search className="pointer-events-none absolute left-3.5 size-4 text-ink-tertiary" />
         <input
           ref={inputRef}
@@ -110,6 +102,9 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
+            /* 输入即重置高亮 —— 放在这里同步做，
+               而不是用 useEffect，避免渲染出一帧旧高亮 */
+            setActiveIndex(0);
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
@@ -149,7 +144,7 @@ export function CitySearch({ current, onSelect, loading }: CitySearchProps) {
             </button>
           )}
         </div>
-      </motion.div>
+      </div>
 
       {/* 结果面板 */}
       <AnimatePresence>

@@ -141,11 +141,17 @@ export function WeatherDashboard({
 
   async function selectCity(city: CityEntry) {
     if (city.id === selected.id) return;
-    setSelected(city);
     setError(null);
 
-    /* 已缓存的直接返回（避免重复请求） */
-    if (cache[city.id]) return;
+    /* 已缓存的直接切换（不发请求） */
+    if (cache[city.id]) {
+      setSelected(city);
+      return;
+    }
+
+    /* 记住上一个城市：请求失败要回滚，否则界面会停留在
+       "新城市名 + 旧城市数据" 的不一致状态 */
+    const previous = selected;
 
     setLoading(true);
     try {
@@ -157,9 +163,18 @@ export function WeatherDashboard({
       const res = await fetch(`/api/weather?${params.toString()}`);
       if (!res.ok) throw new Error(`请求失败（${res.status}）`);
       const json: WeatherData = await res.json();
+
+      /* 成功：写入缓存并切换 */
       setCache((prev) => ({ ...prev, [city.id]: json }));
+      setSelected(city);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "未知错误");
+      /* 失败：回滚到上一个城市，避免数据错乱 */
+      setSelected(previous);
+      setError(
+        `${city.name} 的数据获取失败（${
+          e instanceof Error ? e.message : "未知错误"
+        }），已回到 ${previous.name}`
+      );
     } finally {
       setLoading(false);
     }
@@ -233,7 +248,7 @@ export function WeatherDashboard({
 
         {error && (
           <motion.p
-            className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+            className="mb-6 rounded-[11px] border border-[#f5b5b0] bg-[#fdecea] px-4 py-3 text-sm font-medium leading-relaxed text-[#b3261e]"
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
           >
