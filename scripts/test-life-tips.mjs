@@ -226,15 +226,18 @@ console.log("\n=== 3. 冲突抑制：有雨 vs 防晒 ===\n");
     tipBy(wetForecast, "uv") === undefined
   );
 
-  /* ⚠️ 但高 UV（健康风险）即使在雨天也要提醒 */
+  /* ⚠️ 高 UV（健康风险）在雨天也不推 —— 这是产品决策的变更。
+     原先给 UVI>=7 开了例外，但用户实际看到
+     「正在下暴雨」+「避开正午外出」会觉得荒谬，
+     甚至可能因此忽略整块提醒区。防水安全优先。 */
   const rainyHighUv = makeWeather({
     current: { precipitation: 2.5 },
     daily: [makeDay({ uvIndexMax: 8 })],
-    hourly: makeHours(24),
+    hourly: makeHours(24, { precipitationProbability: 70 }),
   });
   checkThat(
-    "正在下雨 + UVI 8（健康风险）→ 仍推防晒",
-    tipBy(rainyHighUv, "uv") !== undefined
+    "正在下雨 + UVI 8 → 仍不推防晒（避免暴雨天让用户防晒的荒谬感）",
+    tipBy(rainyHighUv, "uv") === undefined
   );
 }
 
@@ -343,7 +346,70 @@ console.log("\n=== 7. 兜底文案 ===\n");
 }
 
 /* ================================================================== */
-/* 8. 国标文案逐字一致性                                              */
+/* 8. 组合合理性：同屏提醒之间不能互相矛盾                              */
+/* ================================================================== */
+
+console.log("\n=== 8. 组合合理性（用户报告的原始问题）===\n");
+
+{
+  /** 检查一组天气下，同时出现的提醒是否有语义冲突 */
+  function conflictCheck(label, data) {
+    const tips = buildLifeTips(data);
+    const titles = tips.map((t) => t.title);
+    const has = (kw) => titles.some((t) => t.includes(kw));
+
+    /* 冲突 1：有雨同时说防晒 */
+    const rainAndSun =
+      has("雨") && (has("防晒") || has("避开正午") || has("室外活动"));
+    /* 冲突 2：有雨同时说适合运动 */
+    const rainAndSport = has("雨") && titles.some((t) => t.includes("适合运动"));
+    /* 冲突 3：正在下雨还说平稳 */
+    const rainAndCalm = has("雨") && titles.includes("今日天气平稳");
+
+    checkThat(`${label}：无"有雨 × 防晒"冲突`, !rainAndSun);
+    checkThat(`${label}：无"有雨 × 适合运动"冲突`, !rainAndSport);
+    checkThat(`${label}：无"有雨 × 天气平稳"冲突`, !rainAndCalm);
+  }
+
+  conflictCheck(
+    "小雨场景",
+    makeWeather({
+      current: { precipitation: 0.6, weatherCode: 61, apparentTemperature: 18 },
+      daily: [makeDay({ weatherCode: 61, uvIndexMax: 5 })],
+      hourly: makeHours(24, { precipitationProbability: 65 }),
+    })
+  );
+
+  conflictCheck(
+    "暴雨 + 高 UV 场景",
+    makeWeather({
+      current: { precipitation: 12, weatherCode: 65, apparentTemperature: 26 },
+      daily: [makeDay({ weatherCode: 65, uvIndexMax: 8 })],
+      hourly: makeHours(24, { precipitationProbability: 90 }),
+    })
+  );
+
+  conflictCheck(
+    "雷暴场景",
+    makeWeather({
+      current: { precipitation: 5, weatherCode: 95, apparentTemperature: 22 },
+      daily: [makeDay({ weatherCode: 95, uvIndexMax: 6 })],
+      hourly: makeHours(24, { precipitationProbability: 85 }),
+    })
+  );
+
+  conflictCheck(
+    "炎热无雨场景",
+    makeWeather({
+      current: { apparentTemperature: 34, precipitation: 0 },
+      daily: [makeDay({ uvIndexMax: 10, tempMax: 36, tempMin: 26 })],
+      hourly: makeHours(24, { precipitationProbability: 5 }),
+    })
+  );
+}
+
+/* ================================================================== */
+/* 9. 国标文案逐字一致性                                              */
 /* ================================================================== */
 
 console.log("\n=== 8. 国标文案逐字一致性 ===\n");

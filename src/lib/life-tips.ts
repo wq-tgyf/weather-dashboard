@@ -269,7 +269,11 @@ function tipUv(data: WeatherData): LifeTip | null {
   /* ⚠️ 冲突抑制：云和雨会大幅削弱紫外线。
      如果今天明显要下雨/正在下雨，再推「注意防晒」就显得自相矛盾
      （用户看到会困惑："到底要不要防晒？"）。
-     阈值取 50% —— 与带伞的「可能有雨」区间对齐，宁可不推也不错推。 */
+
+     阈值：降水概率 >= 60%（必带伞级）或正在下雨或天气代码为雨/雪。
+     一律抑制，包括 UVI >= 7 —— 高 UV 的防晒价值确实存在，
+     但在"正在下暴雨"时提醒用户防晒，用户体感是荒谬的，
+     而且可能因此忽略整块提醒区。防水安全优先于防晒建议。 */
   const { probability: precipProb } = peakPrecipitation(
     data,
     UMBRELLA.lookaheadHours
@@ -280,10 +284,7 @@ function tipUv(data: WeatherData): LifeTip | null {
     precipProb >= UMBRELLA.mustBringProbability ||
     (data.daily[0]?.weatherCode ?? 0) >= 51;
 
-  if (wetWeather && todayMax < 7) {
-    /* 雨天只在高 UV（≥7，健康风险）时才例外提醒 */
-    return null;
-  }
+  if (wetWeather) return null;
 
   let severity: LifeTip["severity"] = "info";
   if (todayMax >= 7) severity = "warning";
