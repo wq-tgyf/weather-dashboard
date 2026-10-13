@@ -2,7 +2,7 @@
  * 城市数据健康检查
  * 用法: npx tsx scripts/check-data-health.mjs
  */
-import raw from "../src/lib/cities.json";
+import raw from "../src/lib/cities.json" with { type: "json" };
 import { searchCities, CITY_COUNT } from "../src/lib/city-search.ts";
 
 const cities = raw;

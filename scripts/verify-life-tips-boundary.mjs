@@ -182,5 +182,108 @@ console.log("\n=== B. 生活提醒（真源码）===");
   check("雷暴（天气码95）出现在结果中", tips.some((t) => t.title?.includes("雷暴")), tips.map(t=>t.title).join(" / "));
 }
 
+/* ------------------------------------------------------------------ */
+/* C. 洗车 / 晾晒（P2 新增）                                           */
+/* ------------------------------------------------------------------ */
+
+// C1. 未来 4 天全干 → 提醒洗车
+{
+  const tips = buildLifeTips(mockWeather({
+    daily: Array.from({ length: 7 }, () => ({ precipitationProbability: 0 })),
+  }));
+  const cw = tips.find((t) => t.id === "carwash");
+  check("4 天全干 → 洗车提醒存在", !!cw, "未生成");
+  check("4 天全干 → 文案是「适合洗车」", cw?.title === "适合洗车", cw?.title ?? "");
+  check("洗车文案含天数 4", cw?.detail?.includes("4"), cw?.detail ?? "");
+}
+
+// C2. 明天就有雨（dry=1）→ 不提醒（带伞已覆盖）
+{
+  const tips = buildLifeTips(mockWeather({
+    daily: [
+      { precipitationProbability: 0 },
+      { precipitationProbability: 80 },
+      { precipitationProbability: 80 },
+      { precipitationProbability: 80 },
+      { precipitationProbability: 80 },
+      { precipitationProbability: 0 },
+      { precipitationProbability: 0 },
+    ],
+  }));
+  check("明天就有雨 → 不提醒洗车", !tips.some((t) => t.id === "carwash"));
+}
+
+// C3. 后天才有雨（dry=2）→ 提醒但非「适合洗车」
+{
+  const tips = buildLifeTips(mockWeather({
+    daily: [
+      { precipitationProbability: 0 },
+      { precipitationProbability: 0 },
+      { precipitationProbability: 80 },
+      { precipitationProbability: 80 },
+      { precipitationProbability: 80 },
+      { precipitationProbability: 0 },
+      { precipitationProbability: 0 },
+    ],
+  }));
+  const cw = tips.find((t) => t.id === "carwash");
+  check("后天有雨 → 仍提醒洗车（dry>=2）", !!cw);
+  check("后天有雨 → 非最高档文案", cw?.title !== "适合洗车", cw?.title ?? "");
+}
+
+// C4. 大风降级
+{
+  const tips = buildLifeTips(mockWeather({
+    current: { windSpeed: 45 },
+    daily: Array.from({ length: 7 }, () => ({ precipitationProbability: 0 })),
+  }));
+  const cw = tips.find((t) => t.id === "carwash");
+  check("4 天全干但大风 → 非「适合洗车」", cw?.title !== "适合洗车", cw?.title ?? "");
+  check("大风文案提到风大", cw?.title?.includes("风大"), cw?.title ?? "");
+}
+
+// C5. 晾晒：今天有雨 → 不提醒
+{
+  const tips = buildLifeTips(mockWeather({
+    hourly: Array.from({ length: 24 }, () => ({ precipitationProbability: 60 })),
+    daily: Array.from({ length: 7 }, () => ({ precipitationProbability: 60 })),
+  }));
+  check("今天有雨 → 不提醒晾晒", !tips.some((t) => t.id === "drying"));
+}
+
+// C6. 晾晒：今天干 + 未来 3 天干 → 「适合晾晒」
+{
+  const tips = buildLifeTips(mockWeather({
+    daily: Array.from({ length: 7 }, () => ({ precipitationProbability: 10 })),
+  }));
+  const dr = tips.find((t) => t.id === "drying");
+  check("连续晴 → 晾晒提醒存在", !!dr);
+  check("连续晴 → 「适合晾晒」", dr?.title === "适合晾晒", dr?.title ?? "");
+}
+
+// C7. 洗车/晾晒是氛围类：不应抢横幅（除非没别的可说）
+{
+  const tips = buildLifeTips(mockWeather({
+    daily: Array.from({ length: 7 }, () => ({ precipitationProbability: 0 })),
+  }));
+  const banner = pickBannerTip(tips);
+  check("氛围类不抢横幅位（横幅是穿衣等）", banner.id !== "carwash" && banner.id !== "drying", banner.id);
+}
+
+// C8. 网格总数仍受 DISPLAY.gridMax 约束（现在候选多了）
+{
+  const tips = buildLifeTips(mockWeather({
+    current: { apparentTemperature: 2, uvIndex: 9 },
+    daily: Array.from({ length: 7 }, () => ({ tempMax: 20, tempMin: 2, uvIndexMax: 9, precipitationProbability: 0 })),
+  }));
+  const grid = pickGridTips(tips);
+  check("候选增多后网格仍 ≤ 5", grid.length <= 5, `实际 ${grid.length}`);
+  check("氛围类排序在健康类之后", (() => {
+    const iHealth = grid.findIndex((t) => t.id === "uv");
+    const iCar = grid.findIndex((t) => t.id === "carwash");
+    return iHealth < iCar;
+  })(), grid.map((t) => t.id).join(","));
+}
+
 console.log(`\n结果: 通过 ${pass} / 失败 ${fail}`);
 process.exit(fail > 0 ? 1 : 0);

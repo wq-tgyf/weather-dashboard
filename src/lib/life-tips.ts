@@ -12,10 +12,12 @@
 
 import type { WeatherData } from "./weather";
 import {
+  CARWASH,
   CERTAINTY_FACTOR,
   COLD,
   DISPLAY,
   DRESSING_LEVELS,
+  DRYING,
   SEVERITY_WEIGHT,
   SPORT_LEVELS,
   TIMELINESS_FACTOR,
@@ -375,6 +377,83 @@ function tipCold(data: WeatherData): LifeTip | null {
 }
 
 /* ------------------------------------------------------------------ */
+/* 洗车 / 晾晒（P2）                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 统计「未来 N 天里，第几天开始出现降水信号」。
+ *
+ * 返回 0 表示未来 N 天全干净；返回 k 表示第 k 天（0 起）首次出现。
+ * 降雪/沙尘天气码也计入 —— 中国天气网官方逻辑：降水、降雪、大风、
+ * 沙尘都会让洗车/晾晒失去意义。
+ */
+function daysUntilWet(data: WeatherData, lookDays: number, threshold: number): number {
+  for (let i = 0; i < Math.min(lookDays, data.daily.length); i++) {
+    const day = data.daily[i];
+    const wet =
+      day.precipitationProbability >= threshold ||
+      isRainCode(day.weatherCode) ||
+      isSnowCode(day.weatherCode);
+    if (wet) return i;
+  }
+  return lookDays;
+}
+
+function tipCarwash(data: WeatherData): LifeTip | null {
+  /* 未来 4 天都很干净才值得提；如果明后天就有雨，洗车提醒反而是噪音
+     （那时候带伞提醒已经覆盖了「今天有雨」的信息）。 */
+  const dry = daysUntilWet(data, CARWASH.lookaheadDays, CARWASH.precipThreshold);
+
+  if (dry < 2) return null;
+
+  const windy = data.current.windSpeed >= CARWASH.strongWind;
+  /* 风大易扬尘：4 天全干净但因大风降一档 */
+  const veryGood = dry >= 4 && !windy;
+
+  return {
+    id: "carwash",
+    icon: "🚗",
+    title: veryGood ? "适合洗车" : windy ? "可洗车，风大易脏" : "近期适合洗车",
+    detail: veryGood
+      ? `未来 ${CARWASH.lookaheadDays} 天无降水${windy ? "，但当前风力较大" : ""}，适宜洗车。`
+      : `未来 ${dry} 天无降水，可以洗车${windy ? "；当前风大，车身易积尘" : ""}。`,
+    severity: "info",
+    score: SEVERITY_WEIGHT.ambient * TIMELINESS_FACTOR.week * CERTAINTY_FACTOR.trend,
+    source: "中国天气网洗车指数（未来 4 天无降水逻辑）",
+    bannerWorthy: false,
+  };
+}
+
+function tipDrying(data: WeatherData): LifeTip | null {
+  const today = data.daily[0];
+  if (!today) return null;
+
+  /* 今天白天就有雨 → 晾晒无意义，且带伞提醒已覆盖该信息 */
+  const { probability } = peakPrecipitation(data, 12);
+  if (probability >= DRYING.todayMaxProbability) return null;
+
+  const dry = daysUntilWet(data, CARWASH.lookaheadDays, DRYING.precipThreshold);
+  if (dry < 1) return null;
+
+  /* 未来多天连续晴 → 值得提醒（晒被子/大洗的好时机） */
+  const goodRun = dry >= 3;
+  const windy = data.current.windSpeed >= CARWASH.strongWind;
+
+  return {
+    id: "drying",
+    icon: "👕",
+    title: goodRun ? "适合晾晒" : "可以晾晒",
+    detail: goodRun
+      ? `今天及未来 ${dry} 天降水概率低，适合晾晒衣物、晒被褥。`
+      : `今天白天降水概率低，可以晾晒${dry >= 2 ? `，未来 ${dry} 天无雨` : ""}。`,
+    severity: "info",
+    score: SEVERITY_WEIGHT.ambient * TIMELINESS_FACTOR.today * CERTAINTY_FACTOR.trend,
+    source: "和风天气晾晒指数（简化 3 档）",
+    bannerWorthy: false,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* 兜底和主入口                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -431,6 +510,9 @@ export function buildLifeTips(data: WeatherData): LifeTip[] {
     tipUv(data),
     tipSport(data),
     tipCold(data),
+    /* 氛围类放最后，优先级低，只作补充 */
+    tipCarwash(data),
+    tipDrying(data),
   ];
 
   const tips = candidates.filter((t): t is LifeTip => t !== null);
