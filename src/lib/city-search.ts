@@ -58,8 +58,6 @@ export type CityEntry = {
   region: string;
   /** 别名（简拼补充，如哈尔滨的 hrb），空格分隔 */
   alias: string;
-  /** 搜索结果中的排序分数（仅搜索时存在） */
-  _score?: number;
 };
 
 const ALL: RawCity[] = rawCities as RawCity[];
@@ -101,12 +99,6 @@ function buildRegion(c: RawCity): string {
 }
 
 export const CITY_COUNT = CITIES.length;
-export const CITY_COUNT_LEVEL1 = CITIES.filter((c) => c.level === 1).length;
-
-/** 按 id 取城市（用于 URL 参数反查） */
-export function getCityById(id: string): CityEntry | null {
-  return CITIES.find((c) => c.id === id) ?? null;
-}
 
 /** 默认城市 */
 export function getDefaultCity(): CityEntry {
@@ -151,20 +143,18 @@ type Scored = { score: number; city: CityEntry };
 export type SearchOptions = {
   /** 最多返回几条，默认 8 */
   limit?: number;
-  /** 是否包含区县（默认包含） */
-  includeDistricts?: boolean;
 };
 
 /**
  * 搜索城市。
  *
- * 空查询返回空数组（不返回全部城市，避免首屏渲染 3600 条）。
+ * 空查询返回空数组（不返回全部城市，避免首屏渲染 3563 条）。
  */
 export function searchCities(
   query: string,
   options: SearchOptions = {}
 ): CityEntry[] {
-  const { limit = 8, includeDistricts = true } = options;
+  const { limit = 8 } = options;
 
   const q = query.trim().toLowerCase();
   if (!q) return [];
@@ -172,8 +162,6 @@ export function searchCities(
   const results: Scored[] = [];
 
   for (const city of CITIES) {
-    if (!includeDistricts && city.level === 2) continue;
-
     const score = scoreCity(city, q);
     if (score <= 0) continue;
 
@@ -199,16 +187,7 @@ export function searchCities(
     return a.city.name.localeCompare(b.city.name, "zh");
   });
 
-  if (results.length > 0) {
-    return results.slice(0, limit).map((r) => ({
-      ...r.city,
-      _score: r.score,
-    }));
-  }
-
-  /* 城市搜不到时，试试是不是在搜省名（如「台湾」「浙江」）——
-     返回该省的城市列表，而不是空结果 */
-  return provinceFallback(q, limit);
+  return results.slice(0, limit).map((r) => r.city);
 }
 
 /** 给单个城市打分，返回 0 表示不匹配 */
@@ -236,79 +215,6 @@ function scoreCity(city: CityEntry, q: string): number {
   if (full.includes(q)) return 30;
 
   return 0;
-}
-
-/* ------------------------------------------------------------------ */
-/* 省名兜底                                                            */
-/* ------------------------------------------------------------------ */
-
-/**
- * 收集所有省份名（含别名）。
- *
- * 数据源（AreaCity level 3）从城市级开始，没有省级条目，
- * 导致搜「台湾」「海南」「浙江」这类省名时一无所获。
- * 兜底：搜到省名时返回该省的热门城市，而不是空结果。
- */
-const PROVINCES = (() => {
-  const map = new Map<string, string>();
-  for (const c of CITIES) {
-    if (c.province && !map.has(c.province)) map.set(c.province, c.province);
-  }
-  return map;
-})();
-
-/** 省名 → 常用拼音/简拼映射（覆盖数据里没有拼音的省名） */
-const PROVINCE_ALIASES: Record<string, string[]> = {
-  台湾: ["taiwan", "tw"],
-  海南: ["hainan", "hn"],
-  浙江: ["zhejiang", "zj"],
-  广东: ["guangdong", "gd"],
-  江苏: ["jiangsu", "js"],
-  四川: ["sichuan", "sc"],
-  湖北: ["hubei", "hb"],
-  湖南: ["hunan", "hn2"],
-  河南: ["henan", "hn3"],
-  河北: ["hebei", "hb2"],
-  山东: ["shandong", "sd"],
-  山西: ["shanxi", "sx"],
-  陕西: ["shaanxi", "sx2"],
-  安徽: ["anhui", "ah"],
-  福建: ["fujian", "fj"],
-  江西: ["jiangxi", "jx"],
-  辽宁: ["liaoning", "ln"],
-  吉林: ["jilin", "jl"],
-  青海: ["qinghai", "qh"],
-  甘肃: ["gansu", "gs"],
-  贵州: ["guizhou", "gz2"],
-  云南: ["yunnan", "yn"],
-  内蒙古: ["neimenggu", "nmg"],
-  广西: ["guangxi", "gx"],
-  西藏: ["xizang", "xz"],
-  宁夏: ["ningxia", "nx"],
-  新疆: ["xinjiang", "xj"],
-  黑龙江: ["heilongjiang", "hlj"],
-};
-
-/**
- * 省名兜底：query 恰好是某个省的名字（或其拼音）时，
- * 返回该省的若干城市（地级市优先，按热度权重排序）。
- * 只在城市本身搜不到任何结果时才启用，避免干扰正常搜索。
- */
-function provinceFallback(q: string, limit: number): CityEntry[] {
-  for (const [province, aliases] of Object.entries(PROVINCE_ALIASES)) {
-    const match =
-      province === q || province.toLowerCase() === q || aliases.includes(q);
-    if (!match) continue;
-
-    return CITIES.filter((c) => c.province === province && c.level === 1)
-      .sort(
-        (a, b) =>
-          (weightOf(b.name) ?? 0) - (weightOf(a.name) ?? 0) ||
-          a.name.localeCompare(b.name, "zh")
-      )
-      .slice(0, limit);
-  }
-  return [];
 }
 
 /* ------------------------------------------------------------------ */
