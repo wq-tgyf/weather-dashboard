@@ -1,0 +1,41 @@
+name: CI
+
+# 触发条件：
+#   - 推送到 master
+#   - 对 master 的 PR
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  verify:
+    name: 类型检查 + 测试 + 构建
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: 安装依赖
+        # 用 ci 而不是 install：严格按 lockfile 安装，且失败时不写入 lockfile
+        run: npm ci
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 测试
+        run: npm test
+
+      - name: 生产构建
+        run: npm run build
+        env:
+          # 构建期不需要真实数据源，但 Next.js 可能读取这个变量
+          NEXT_TELEMETRY_DISABLED: "1"

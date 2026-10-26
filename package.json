@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "verify": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
